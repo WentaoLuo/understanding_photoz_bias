@@ -3,7 +3,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import integrate
-import posterior as post
 
 # Basic Parameters---------------------------
 #h = 0.673
@@ -34,9 +33,9 @@ Gg    =6.67408e-11
 ckm   =3.240779e-17            
 ckg   =5.027854e-31           
 fac   =(vc*vc*ckg)/(4.*pi*Gg*ckm) 
-#resp,errorp = np.loadtxt('parents_dist.dat',unpack=True) 
-zss   = np.array([0.2,0.4,0.6,0.8])
-zs    = zss[3]
+resp,errorp = np.loadtxt('parents_dist.dat',unpack=True) 
+sige  = 0.4
+zs    = 0.45
 Nboot = 200
 #--Basic cosmology calculations--------------------
 def efunclcdm(x):
@@ -107,11 +106,12 @@ def nfwesd(theta,z,Rp):
   return esd
 
 def Rpbins(theta,Nbin,z):
-  Rmax  = 3.0
-  Rmin  = 0.1
+  Rmax  = 2.0
+  Rmin  = 0.02
   dl    = Da(z)
+  #zs    = 0.45
   ds    = Da(zs)
-  Sig   = fac*ds/(dl*(ds-dl))/(1.0+z)/(1.0+z)
+  Sig   =fac*ds/(dl*(ds-dl))/(1.0+z)/(1.0+z)
   rbin  = np.zeros(Nbin+1)
   r     = np.zeros(Nbin)
   xtmp  = (np.log10(Rmax)-np.log10(Rmin))/Nbin
@@ -132,85 +132,106 @@ def Rpbins(theta,Nbin,z):
     r[i] =(rbin[i])*0.5+(rbin[i+1])*0.5
     ngals[i]= np.random.poisson(lam=area[i])
     #ngals[i]= area[i]
-    #if ngals[i]>0:
-    esdnfw[i]= nfwesd(theta,z,r[i])/Sig
+    if ngals[i]>0:
+      esdnfw[i]= nfwesd(theta,z,r[i])/Sig
   return {'radius':r,'NUM':ngals,'NFW':esdnfw}
-
-#-----marginalizing PofZ on ESDs---------------------------------
-def esdsymmetric(theta):
-   zz        = np.linspace(0.1,1.1,500) 
-   ds        = np.zeros(500)
-   for ids in range(500):
-     ds[ids] = Da(zz[ids])
-
-   zl,zs,zsig= theta
-   dl        = Da(zl)
-
-   gauss     = post.gaussian(zs,zsig)
-   ix        = zz>=zl+0.01
-   Sig_pofz  = (gauss[ix]*fac*ds[ix]/(dl*(ds[ix]-dl))/(1.0+zl)/(1.0+zl)).sum()
-   return Sig_pofz 
-
-def esdasymmetric(theta):
-   zz        = np.linspace(0.1,1.1,500) 
-   ds        = np.zeros(500)
-   for ids in range(500):
-     ds[ids] = Da(zz[ids])
-
-   zl,zs,dz,zsig1,zsig2,ratio= theta
-   dl        = Da(zl)
-   ix        = zz>=zl+0.01
-   pofz      = post.twogaussian(zs,dz,zsig1,zsig2,ratio)
-   
-   plt.plot(zz,pofz)
-   plt.xlabel('z')
-   plt.ylabel('p(z)')
-   plt.show()
-      
-   Sig_pofz  = (pofz[ix]*fac*ds[ix]/(dl*(ds[ix]-dl))/(1.0+zl)/(1.0+zl)).sum()
-   
-   return Sig_pofz 
 
 #----------------------------------------------------------------
 def main():
 
 #------------------------------------------------------------------
-   zl    = 0.1
-   zs    = 0.3
-   dl    = Da(zl)
+   zs    = 0.45
    ds    = Da(zs)
-   Nbin  = 30
-   shear = np.zeros(Nbin)
-   
-   dz    = 0.2
-   zsig1 = 0.05
-   zsig2 = 0.1
-   ratio = 2.0 
+   sige  = 0.36
+   Nbin  = 10
+   shear = np.zeros((Nlens,Nbin))
+   Ngax  = np.zeros((Nlens,Nbin))
 
    Mh   = 14.0
    c    = 4.67*(10.0**(Mh-14)*h)**(-0.11) # Neto et al 2007 
-   info = Rpbins([Mh,c],Nbin,zl)
-   Rp   = info['radius']
-   shear= info['NFW']
-   Sig  =fac*ds/(dl*(ds-dl))/(1.0+zl)/(1.0+zl)
-   esd_true = Sig*shear
+   sumshrI  = np.zeros(Nbin)
+   sumwhtI  = np.zeros(Nbin)
+   sumesd   = np.zeros(Nbin)
+   for i in range(Nlens):
+     #Mh   = Mhcen[i]
+     #c    = 4.67*(10.0**(Mh-14)*h)**(-0.11) # Neto et al 2007 
+     info = Rpbins([Mh,c],Nbin,zlcen[i])
+     #info = Rpbins([Mh,c],Nbin,zl[i])
+     Rp   = info['radius']
+     shear[i,:] = info['NFW']
+     Ngax[i,:]  = info['NUM']
+     dl   = Da(zlcen[i])*(1.0+zlcen[i])
+     Sig  =fac*ds/(dl*(ds-dl))/(1.0+zlcen[i])/(1.0+zlcen[i])
+     #print zl[i],Ngax[i,:].sum()
+     for j in range(Nbin):
+          sumesd[j]  = sumesd[j]+nfwesd([Mh,c],zlcen[i],Rp[j])
+          ngal  = int(np.around(Ngax[i,j]))
+	  sumnum[j]= sumnum[j]+Ngax[i,j]
+	  isx   = np.random.randint(low=0,high=len(errorp),size=ngal)
+          gmt   = Sig*np.random.normal(loc=shear[i,j],scale=sige,size=ngal)
+          #-- Normal weighting-----------------------------
+	  #wht   = 1.0/(sige*sige+errorp[isx]**2)/Sig/Sig
+          #-- No Sig_c weighting-----------------------------
+	  wht   = 1.0/(sige*sige+errorp[isx]**2)
+          #-- Constant galaxy measurement error weighting---------
+	  #wht   = 1.0/(sige*sige+0.05)/Sig/Sig
+          #-- Constant  weighting---------
+	  #wht   = 1.0/(sige*sige)
+          # test error ratio without geometry----------------------
+          #gmt   = Sig*np.random.normal(loc=shear[i,j],scale=sige,size=ngal)
+	  #wht   = 1.0/(sige*sige+errorp[isx]**2)
+          # end of test----------------------------------------------------
+	  #-------- weight I--------------------------------------
+          sumshrI[j] = sumshrI[j]+(gmt*wht).sum()
+          sumwhtI[j] = sumwhtI[j]+wht.sum()
+          #sumwhtI[j] = sumwhtI[j]+wht
+          sumerrI[j] = sumerrI[j]+(gmt*gmt*wht*wht).sum()
 
-   params1  = np.array([zl,zs,zsig1])
-   esd_sym  = shear*esdsymmetric(params1)
-   params2  = np.array([zl,zs,dz,zsig1,zsig2,ratio])
-   esd_asym = shear*esdasymmetric(params2)
+	  #-------- weight I--------------------------------------
+          sumshrII[j]= sumshrII[j]+(gmt*wht).sum()/Vcen[i]
+          sumwhtII[j]= sumwhtII[j]+wht.sum()/Vcen[i]
+          #sumwhtII[j]= sumwhtII[j]+wht/Vcen[i]
+          sumerrII[j]= sumerrII[j]+(gmt*gmt*wht*wht).sum()/Vcen[i]/Vcen[i]
 
+   print '# '+str(Nlens) 
+   print '# '+str(sumnum.sum())
+   gammaI  = sumshrI/sumwhtI
+   #gammaI  = sumshrI/sumwhtI/sumnum  # for constant weighting
+   errorI  = np.sqrt(sumerrI/(sumwhtI*sumwhtI))/2.0
+   gammaII = sumshrII/sumwhtII
+   #gammaII = sumshrII/sumwhtII/sumnum # for constant weighting
+   errorII = np.sqrt(sumerrII/sumwhtII/sumwhtII)/2.0
+   esdnfw  = np.zeros(Nbin)
+   Mhm     = np.mean(Mhcen)
+   zm      = np.mean(zlcen)
+   con     = 4.67*(10.0**(Mhm-14)*h)**(-0.11) # Neto et al 2007 
+    
+   if int(sys.argv[4])==1:
+      print "# volum limited"
+      print "# Rp   ESD_wtI    Error_wtI     ESD_wtII    Error_wtII    NFW<Mh>"
+   if int(sys.argv[4])==2:
+      print "# flux limited"
+      print "# Rp   ESD_wtI    Error_wtI     ESD_wtII    Error_wtII    NFW<Mh>"
+
+   esdnfw = (sumesd/float(Nlens))
+   for ie in range(Nbin):
+      print Rp[ie],gammaI[ie],errorI[ie],gammaII[ie],errorII[ie],esdnfw[ie]
+    
    plt.figure(figsize=[9,6])
-   plt.plot(Rp,esd_true,'k--',linewidth=3,label='True ESD')
-   plt.plot(Rp,esd_sym,'b-.',linewidth=3,label='Gaussian pofz ESD')
-   plt.plot(Rp,esd_asym,'g:',linewidth=3,label='twoGaussian pofz ESD')
+   plt.errorbar(Rp,gammaI/h,yerr=errorI*1.414/h,fmt='g.',\
+                ms=20,elinewidth=3,label='weight I')
+   plt.errorbar(Rp,gammaII/h,yerr=errorII*1.414/h,fmt='r.',\
+                ms=20,elinewidth=3,label='weight II')
+   plt.plot(Rp,gammaII/h,'r--',linewidth=3,label='weight volum limited')
+   plt.plot(Rp,gammaI/h,'g--',linewidth=3,label='weight traditional')
+   plt.plot(Rp,esdnfw/h,'b-',linewidth=3,label='<Mh> NFW model')
    plt.xlabel('R ($h^{-1}kpc$)',fontsize=20)
    plt.ylabel('ESD ($M_{\odot}/pc^2)$',fontsize=20)
    plt.legend()
    plt.xscale('log')
    plt.yscale('log',nonposy='clip')
-   plt.xlim(0.1,3.0)
-   plt.ylim(1.001,500)
+   plt.xlim(0.02,2.0)
+   plt.ylim(10.001,1500)
    plt.show()
     
 if __name__=='__main__':
