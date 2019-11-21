@@ -147,6 +147,13 @@ def esdsymmetric(theta):
    dl        = Da(zl)
 
    gauss     = post.gaussian(zs,zsig)
+   #plt.plot(zz,gauss,'k-',linewidth=3)
+   #plt.xlabel('z')
+   #plt.xlim(0.1,0.5)
+   #plt.ylabel('P(z)')
+   #plt.savefig('gauss.eps')
+   #plt.show()
+	  
    ix        = zz>=zl+0.01
    Sig_pofz  = (gauss[ix]*fac*ds[ix]/(dl*(ds[ix]-dl))/(1.0+zl)/(1.0+zl)).sum()
    return Sig_pofz 
@@ -162,14 +169,36 @@ def esdasymmetric(theta):
    ix        = zz>=zl+0.01
    pofz      = post.twogaussian(zs,dz,zsig1,zsig2,ratio)
    
-   plt.plot(zz,pofz)
-   plt.xlabel('z')
-   plt.ylabel('p(z)')
-   plt.show()
+   #plt.plot(zz,pofz,'k-',linewidth=3)
+   #plt.xlabel('z')
+   #plt.ylabel('p(z)')
+   #plt.savefig('twogauss.eps')
+   #plt.show()
       
    Sig_pofz  = (pofz[ix]*fac*ds[ix]/(dl*(ds[ix]-dl))/(1.0+zl)/(1.0+zl)).sum()
    
    return Sig_pofz 
+
+def esdhsc(theta):
+   zz        = np.linspace(0.1,1.1,500) 
+   ds        = np.zeros(500)
+   for ids in range(500):
+     ds[ids] = Da(zz[ids])
+
+   zl,zs,indx= theta
+
+   dl        = Da(zl)
+   ix        = zz>=zl+0.01
+   struct    = post.pofz_hsc(indx)
+   zbin      = struct['zbin']+dz
+   tmp       = struct['pofz']
+   tmp       = tmp/tmp.sum()
+   ixx       = tmp ==np.max(tmp) 
+   dz        = (zs-zbin[ixx])
+   zbnew     = struct['zbin']+dz
+   pofz      = np.interp(zz,zbnew,tmp)       
+   Sig_pofz  = (pofz[ix]*fac*ds[ix]/(dl*(ds[ix]-dl))/(1.0+zl)/(1.0+zl)).sum()
+   return Sig_pofz
 
 #----------------------------------------------------------------
 def main():
@@ -200,18 +229,46 @@ def main():
    params2  = np.array([zl,zs,dz,zsig1,zsig2,ratio])
    esd_asym = shear*esdasymmetric(params2)
 
-   plt.figure(figsize=[9,6])
-   plt.plot(Rp,esd_true,'k--',linewidth=3,label='True ESD')
-   plt.plot(Rp,esd_sym,'b-.',linewidth=3,label='Gaussian pofz ESD')
-   plt.plot(Rp,esd_asym,'g:',linewidth=3,label='twoGaussian pofz ESD')
-   plt.xlabel('R ($h^{-1}kpc$)',fontsize=20)
-   plt.ylabel('ESD ($M_{\odot}/pc^2)$',fontsize=20)
+   #vm1  = np.mean(esd_sym/esd_true) 
+   #vm2  = np.mean(esd_asym/esd_true) 
+   #print vm2,vm1
+   #---- Real test part ----------------------------------
+   parab1   = np.array([zl,zs,1])
+   esd_hsc1 = shear*esdhsc(parab1)
+   parab2   = np.array([zl,zs,2])
+   esd_hsc2 = shear*esdhsc(parab2)
+   parab3   = np.array([zl,zs,3])
+   esd_hsc3 = shear*esdhsc(parab3)
+   parab4   = np.array([zl,zs,4])
+   esd_hsc4 = shear*esdhsc(parab4)
+   fig,axs=plt.subplots(nrows=2,ncols=1,sharex=True,
+                   sharey=False,figsize=(8,8))
+   l1,=axs[0].plot(Rp,esd_true,'k--',linewidth=3,label='True ESD')
+   l2,=axs[0].plot(Rp,esd_sym,'b-.',linewidth=3,label='Gaussian pofz ESD')
+   l3,=axs[0].plot(Rp,esd_asym,'g:',linewidth=3,label='twoGaussian pofz ESD')
+   axs[0].plot(Rp,esd_asym,'g:',linewidth=3,label='twoGaussian pofz ESD')
+   axs[0].set_xscale('log')
+   axs[0].set_yscale('log',nonposy='clip')
+   axs[0].set_ylabel('ESD ($M_{\odot}/pc^2)$',fontsize=20)
+   axs[0].set_xlim(0.1,3.0)
+   axs[0].set_ylim(1.001,500)
+   axs[0].set_yticks([10,100])
+   
+   axs[1].plot(Rp,esd_true/esd_true,'k-',linewidth=3)
+   axs[1].plot(Rp,esd_sym/esd_true,'b-.',linewidth=3)
+   axs[1].plot(Rp,esd_asym/esd_true,'g:',linewidth=3)
+   axs[1].set_xscale('log')
+   axs[1].set_xlim(0.1,3.0)
+   axs[1].set_ylim(0.9,1.05)
+   axs[1].set_yticks([0.94,1.0,1.03])
+   axs[1].set_ylabel('ratio (ESD_bias/ESD_true)',fontsize=20)
+   fig.text(0.5,0.03,'R $h^{-1}Mpc$',ha='center',size=16)
+   plt.subplots_adjust(wspace = 0.0, hspace = 0.0 )
+   lines = [l1,l2,l3]
+   axs[0].legend(lines,[l.get_label() for l in lines])
    plt.legend()
-   plt.xscale('log')
-   plt.yscale('log',nonposy='clip')
-   plt.xlim(0.1,3.0)
-   plt.ylim(1.001,500)
+   plt.savefig('toy_bias.eps')
    plt.show()
-    
+
 if __name__=='__main__':
    main()

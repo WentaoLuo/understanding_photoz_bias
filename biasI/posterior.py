@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import astropy.io.fits as pf
 
 pi = np.pi
 
@@ -36,7 +37,26 @@ def twogaussian(z0,dz,sig,sig1,ratio):
   plt.show()
   """
   return gauss
-  
+def pofz_hsc(indx):
+   data = pf.getdata('mlz_photoz_pdf_stack4.fits')
+   data1= pf.getdata('pozBins.fits')
+   zbin = data1
+	 
+   p1   = data[0,:]
+   p2   = data[1,:]
+   p3   = data[2,:]
+   p4   = data[3,:]
+   if indx==1:
+     pofz = p1
+   if indx==2:
+     pofz = p2
+   if indx==3:
+     pofz = p3
+   if indx==4:
+     pofz = p4
+   struct={'zbin':zbin,'pofz':pofz}
+   return struct
+										     
 """
 def main():
 
