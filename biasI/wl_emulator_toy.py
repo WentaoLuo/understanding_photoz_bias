@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import integrate
 import posterior as post
+import astropy.io.fits as pf
 
 # Basic Parameters---------------------------
 #h = 0.673
@@ -38,6 +39,32 @@ fac   =(vc*vc*ckg)/(4.*pi*Gg*ckm)
 zss   = np.array([0.2,0.4,0.6,0.8])
 zs    = zss[3]
 Nboot = 200
+#--HSC-SSP P(z) & N(z)-------------------------------
+hscall  = pf.getdata('mlz_photoz_pdf_stack.fits')
+hscdata = pf.getdata('mlz_photoz_pdf_stack4.fits')
+hscdata1= pf.getdata('pozBins.fits')
+def zdist_hsc():
+  zbin = hscdata1
+  nz   = hscall
+  return 0
+def pofz_hsc(indx):
+  zbin = hscdata1
+
+  p1   = hscdata[0,:]
+  p2   = hscdata[1,:]
+  p3   = hscdata[2,:]
+  p4   = hscdata[3,:]
+  if indx==1:
+    pofz = p1
+  if indx==2:
+    pofz = p2
+  if indx==3:
+    pofz = p3
+  if indx==4:
+    pofz = p4
+  struct={'zbin':zbin,'pofz':pofz}
+  return struct
+
 #--Basic cosmology calculations--------------------
 def efunclcdm(x):
    res = 1.0/np.sqrt(Om0*(1.0+x)**3+Ok0*(1.0+x)**2+Ol0*(1.0+x)**(3*(1.0+w)))
@@ -188,15 +215,18 @@ def esdhsc(theta):
    zl,zs,indx= theta
 
    dl        = Da(zl)
-   ix        = zz>=zl+0.01
-   struct    = post.pofz_hsc(indx)
-   zbin      = struct['zbin']+dz
+   ix        = zz>=zl+0.1
+   struct    = pofz_hsc(indx)
+   zbin      = struct['zbin']
    tmp       = struct['pofz']
    tmp       = tmp/tmp.sum()
    ixx       = tmp ==np.max(tmp) 
    dz        = (zs-zbin[ixx])
    zbnew     = struct['zbin']+dz
    pofz      = np.interp(zz,zbnew,tmp)       
+   pofz      = pofz/pofz.sum()
+   #plt.plot(zz,pofz)
+   #plt.show()
    Sig_pofz  = (pofz[ix]*fac*ds[ix]/(dl*(ds[ix]-dl))/(1.0+zl)/(1.0+zl)).sum()
    return Sig_pofz
 
@@ -205,7 +235,7 @@ def main():
 
 #------------------------------------------------------------------
    zl    = 0.1
-   zs    = 0.3
+   zs    = 0.35
    dl    = Da(zl)
    ds    = Da(zs)
    Nbin  = 30
@@ -241,12 +271,14 @@ def main():
    esd_hsc3 = shear*esdhsc(parab3)
    parab4   = np.array([zl,zs,4])
    esd_hsc4 = shear*esdhsc(parab4)
+
    fig,axs=plt.subplots(nrows=2,ncols=1,sharex=True,
                    sharey=False,figsize=(8,8))
-   l1,=axs[0].plot(Rp,esd_true,'k--',linewidth=3,label='True ESD')
-   l2,=axs[0].plot(Rp,esd_sym,'b-.',linewidth=3,label='Gaussian pofz ESD')
-   l3,=axs[0].plot(Rp,esd_asym,'g:',linewidth=3,label='twoGaussian pofz ESD')
-   axs[0].plot(Rp,esd_asym,'g:',linewidth=3,label='twoGaussian pofz ESD')
+   l1,=axs[0].plot(Rp,esd_true,'k-',linewidth=3,label='True ESD')
+   l2,=axs[0].plot(Rp,esd_hsc1,'b-.',linewidth=3,label='zbin1')
+   l3,=axs[0].plot(Rp,esd_hsc2,'g-.',linewidth=3,label='zbin2')
+   l4,=axs[0].plot(Rp,esd_hsc3,'y-.',linewidth=3,label='zbin3')
+   l5,=axs[0].plot(Rp,esd_hsc4,'c-.',linewidth=3,label='zbin4')
    axs[0].set_xscale('log')
    axs[0].set_yscale('log',nonposy='clip')
    axs[0].set_ylabel('ESD ($M_{\odot}/pc^2)$',fontsize=20)
@@ -255,19 +287,21 @@ def main():
    axs[0].set_yticks([10,100])
    
    axs[1].plot(Rp,esd_true/esd_true,'k-',linewidth=3)
-   axs[1].plot(Rp,esd_sym/esd_true,'b-.',linewidth=3)
-   axs[1].plot(Rp,esd_asym/esd_true,'g:',linewidth=3)
+   axs[1].plot(Rp,esd_hsc1/esd_true,'b-.',linewidth=3)
+   axs[1].plot(Rp,esd_hsc2/esd_true,'g-.',linewidth=3)
+   axs[1].plot(Rp,esd_hsc3/esd_true,'y-.',linewidth=3)
+   axs[1].plot(Rp,esd_hsc4/esd_true,'c-.',linewidth=3)
    axs[1].set_xscale('log')
    axs[1].set_xlim(0.1,3.0)
-   axs[1].set_ylim(0.9,1.05)
-   axs[1].set_yticks([0.94,1.0,1.03])
+   #axs[1].set_ylim(0.9,1.05)
+   #axs[1].set_yticks([0.94,1.0,1.03])
    axs[1].set_ylabel('ratio (ESD_bias/ESD_true)',fontsize=20)
    fig.text(0.5,0.03,'R $h^{-1}Mpc$',ha='center',size=16)
    plt.subplots_adjust(wspace = 0.0, hspace = 0.0 )
-   lines = [l1,l2,l3]
+   lines = [l1,l2,l3,l4,l5]
    axs[0].legend(lines,[l.get_label() for l in lines])
    plt.legend()
-   plt.savefig('toy_bias.eps')
+   plt.savefig('toy_bias_2.eps')
    plt.show()
 
 if __name__=='__main__':

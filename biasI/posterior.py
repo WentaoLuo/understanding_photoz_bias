@@ -37,6 +37,7 @@ def twogaussian(z0,dz,sig,sig1,ratio):
   plt.show()
   """
   return gauss
+"""
 def pofz_hsc(indx):
    data = pf.getdata('mlz_photoz_pdf_stack4.fits')
    data1= pf.getdata('pozBins.fits')
@@ -57,7 +58,7 @@ def pofz_hsc(indx):
    struct={'zbin':zbin,'pofz':pofz}
    return struct
 										     
-"""
+
 def main():
 
   #gaussian(0.4,0.05)
